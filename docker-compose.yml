@@ -1,0 +1,19 @@
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: tabletime
+      POSTGRES_USER: tabletime
+      POSTGRES_PASSWORD: tabletime
+    ports:
+      - "5433:5432"
+    volumes:
+      - tabletime-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U tabletime -d tabletime"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  tabletime-data:

@@ -8,7 +8,7 @@ import java.time.LocalTime;
 
 @RestController
 @RequestMapping("/api/reservations")
-@CrossOrigin(origins = "http://localhost:5173")
+@CrossOrigin(origins = {"http://localhost:5173", "http://127.0.0.1:5173"})
 public class ReservationController {
     private final ReservationService service;
 

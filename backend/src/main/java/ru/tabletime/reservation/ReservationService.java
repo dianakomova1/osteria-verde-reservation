@@ -36,7 +36,12 @@ public class ReservationService {
         validate(request);
 
         List<RestaurantTable> suitableTables = tableRepository.findSuitableForUpdate(request.guestsCount());
-        RestaurantTable table = findAvailableTable(request, suitableTables);
+        RestaurantTable table = findAvailableTable(
+                request.reservationDate(),
+                request.reservationTime(),
+                request.seatingPreference(),
+                suitableTables
+        );
         if (table == null) {
             throw new ResponseStatusException(
                     HttpStatus.CONFLICT,
@@ -59,14 +64,12 @@ public class ReservationService {
             Integer guestsCount,
             String seatingPreference
     ) {
-        ReservationRequest request = new ReservationRequest(
-                "Проверка", "+79999999999", "check@example.ru",
-                date, time, guestsCount, seatingPreference
-        );
-        validate(request);
+        validateVisit(date, time, guestsCount, seatingPreference);
 
         RestaurantTable table = findAvailableTable(
-                request,
+                date,
+                time,
+                seatingPreference,
                 tableRepository.findByCapacityGreaterThanEqualOrderByCapacityAscTableNumberAsc(guestsCount)
         );
         if (table == null) {
@@ -106,16 +109,21 @@ public class ReservationService {
         return ReservationResponse.from(repository.save(reservation));
     }
 
-    private RestaurantTable findAvailableTable(ReservationRequest request, List<RestaurantTable> suitableTables) {
-        LocalTime endTime = request.reservationTime().plusHours(2);
+    private RestaurantTable findAvailableTable(
+            LocalDate date,
+            LocalTime time,
+            String seatingPreference,
+            List<RestaurantTable> suitableTables
+    ) {
+        LocalTime endTime = time.plusHours(2);
 
         return suitableTables.stream()
                 .sorted(Comparator
-                        .comparing((RestaurantTable table) -> !matchesPreference(table, request.seatingPreference()))
+                        .comparing((RestaurantTable table) -> !matchesPreference(table, seatingPreference))
                         .thenComparing(RestaurantTable::getCapacity)
                         .thenComparing(RestaurantTable::getTableNumber))
                 .filter(table -> repository.countOverlapping(
-                        table.getId(), request.reservationDate(), request.reservationTime(), endTime
+                        table.getId(), date, time, endTime
                 ) == 0)
                 .findFirst()
                 .orElse(null);
@@ -129,6 +137,9 @@ public class ReservationService {
     }
 
     private void validate(ReservationRequest request) {
+        if (request == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Данные бронирования не переданы");
+        }
         if (request.guestName() == null || request.guestName().isBlank()) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Укажите имя гостя");
         }
@@ -144,27 +155,41 @@ public class ReservationService {
                     "Email должен быть указан в формате name@example.ru"
             );
         }
-        if (request.reservationDate() == null || request.reservationDate().isBefore(LocalDate.now())) {
+        validateVisit(
+                request.reservationDate(),
+                request.reservationTime(),
+                request.guestsCount(),
+                request.seatingPreference()
+        );
+    }
+
+    private void validateVisit(
+            LocalDate reservationDate,
+            LocalTime reservationTime,
+            Integer guestsCount,
+            String seatingPreference
+    ) {
+        if (reservationDate == null || reservationDate.isBefore(LocalDate.now())) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Дата бронирования не может быть в прошлом");
         }
-        if (request.reservationTime() == null) {
+        if (reservationTime == null) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Укажите время бронирования");
         }
-        if (LocalDateTime.of(request.reservationDate(), request.reservationTime()).isBefore(LocalDateTime.now())) {
+        if (LocalDateTime.of(reservationDate, reservationTime).isBefore(LocalDateTime.now())) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Время бронирования уже прошло");
         }
-        if (request.reservationTime().isBefore(LocalTime.of(12, 0))
-                || request.reservationTime().isAfter(LocalTime.of(21, 0))
-                || request.reservationTime().getMinute() % 30 != 0) {
+        if (reservationTime.isBefore(LocalTime.of(12, 0))
+                || reservationTime.isAfter(LocalTime.of(21, 0))
+                || reservationTime.getMinute() % 30 != 0) {
             throw new ResponseStatusException(
                     HttpStatus.BAD_REQUEST,
                     "Выберите время с 12:00 до 21:00 с интервалом 30 минут"
             );
         }
-        if (request.guestsCount() == null || request.guestsCount() < 1 || request.guestsCount() > 12) {
+        if (guestsCount == null || guestsCount < 1 || guestsCount > 12) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Количество гостей должно быть от 1 до 12");
         }
-        if (request.seatingPreference() == null || request.seatingPreference().isBlank()) {
+        if (seatingPreference == null || seatingPreference.isBlank()) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Укажите предпочтение по расположению");
         }
     }

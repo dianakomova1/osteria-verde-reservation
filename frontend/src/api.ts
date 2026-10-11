@@ -12,7 +12,10 @@ const getErrorMessage = async (response: Response) => {
 }
 
 const request = async <T>(url: string, options?: RequestInit): Promise<T> => {
-  const response = await fetch(`${API_URL}${url}`, options)
+  const response = await fetch(`${API_URL}${url}`, {
+    cache: 'no-store',
+    ...options,
+  })
   if (!response.ok) {
     throw new Error(await getErrorMessage(response))
   }
